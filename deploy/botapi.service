@@ -1,0 +1,16 @@
+[Unit]
+Description=Telegram Bot Manager - API Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Telegram_Bot_Manager
+Environment="PATH=/home/ubuntu/Telegram_Bot_Manager/venv/bin"
+EnvironmentFile=/home/ubuntu/Telegram_Bot_Manager/.env
+ExecStart=/home/ubuntu/Telegram_Bot_Manager/venv/bin/python api.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

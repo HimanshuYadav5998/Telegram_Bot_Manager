@@ -1,0 +1,21 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# railway.toml — Railway deployment configuration
+# Docs: https://docs.railway.app/reference/config-as-code
+# ─────────────────────────────────────────────────────────────────────────────
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "pip install -r requirements.txt && cd dashboard && npm install && npm run build && cd .."
+
+[deploy]
+startCommand = "python api.py"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[[services]]
+name = "api"
+startCommand = "python api.py"
+
+[[services]]
+name = "bot"
+startCommand = "python bot.py"

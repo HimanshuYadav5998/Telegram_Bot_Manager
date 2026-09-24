@@ -5,15 +5,22 @@ import secrets
 import subprocess
 import sys
 import threading
+from pathlib import Path
 from typing import Optional
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import database as db
+
+# ── Resolve paths ─────────────────────────────────────────────────────────────
+BASE_DIR   = Path(__file__).parent
+DIST_DIR   = BASE_DIR / "dashboard" / "dist"
 
 # ── Init DB ───────────────────────────────────────────────────────────────────
 db.init_db()
@@ -344,9 +351,26 @@ def update_config(payload: ConfigPayload, token: str = Depends(_verify_token)):
     return {"ok": True}
 
 
+# ── Serve React frontend (production build) ───────────────────────────────────
+# Mount static assets (js/css/images) — only if the build exists
+if DIST_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str = ""):
+        """Catch-all: serve React's index.html for any non-API route."""
+        # Don't catch API routes
+        if full_path.startswith(("api/", "docs", "openapi")):
+            raise HTTPException(status_code=404)
+        index = DIST_DIR / "index.html"
+        if index.exists():
+            return FileResponse(str(index))
+        return {"error": "Frontend not built. Run: cd dashboard && npm run build"}
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    # NOTE: reload=False is intentional — reload=True kills the bot subprocess
-    # on every file change, making the bot go offline.
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=False)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("api:app", host="0.0.0.0", port=port, reload=False)
