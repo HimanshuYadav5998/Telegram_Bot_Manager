@@ -1,9 +1,14 @@
 import sqlite3
 import threading
+import os
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "bot_data.db"
+# In production (Railway/VPS), set DATA_DIR env var to a persistent volume path.
+# Falls back to the directory of this file for local development.
+_data_dir = Path(os.environ.get("DATA_DIR", Path(__file__).parent))
+_data_dir.mkdir(parents=True, exist_ok=True)
+DB_PATH = _data_dir / "bot_data.db"
 _lock = threading.Lock()
 
 
