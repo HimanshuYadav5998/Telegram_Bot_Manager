@@ -148,6 +148,16 @@ class PreviewCreatePayload(BaseModel):
     name: str
     type: str # 'file_id' or 'url'
     content: str
+
+class BroadcastPayload(BaseModel):
+    message: str
+
+class ConfigPayload(BaseModel):
+    channel_link: Optional[str] = None
+    bot_token: Optional[str] = None
+
+class UserStatusPayload(BaseModel):
+    status: str
 # ── Auth ──────────────────────────────────────────────────────────────────────
 @api_router.post("/auth/login")
 def login(payload: LoginPayload):
