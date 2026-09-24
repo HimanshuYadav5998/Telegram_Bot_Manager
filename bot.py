@@ -2,6 +2,8 @@ import asyncio
 import logging
 import sys
 import time
+from datetime import datetime, timedelta
+import json
 
 from telegram import Update
 from telegram.ext import (
@@ -35,10 +37,88 @@ db.init_db()
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
 
+
+async def cleanup_expired_previews(context: ContextTypes.DEFAULT_TYPE):
+    expired = db.get_expired_accesses()
+    for access in expired:
+        try:
+            msg_ids = json.loads(access["message_ids"] or "[]")
+            for mid in msg_ids:
+                try:
+                    await context.bot.delete_message(chat_id=access["chat_id"], message_id=mid)
+                except Exception as e:
+                    logger.warning(f"Could not delete message {mid} for access {access['id']}: {e}")
+            
+            # Send expiration notification
+            try:
+                await context.bot.send_message(chat_id=access["chat_id"], text="Your 15-minute preview has expired.")
+            except Exception:
+                pass
+                
+        except Exception as e:
+            logger.error(f"Error processing expired access {access['id']}: {e}")
+            
+        finally:
+            db.mark_access_deleted(access["id"])
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not user:
         return
+    
+    # Check for deep linking (e.g. /start preview_xyz)
+    if context.args and len(context.args) > 0:
+        preview_id = context.args[0]
+        preview = db.get_preview(preview_id)
+        
+        if preview:
+            if not preview["is_active"]:
+                await update.message.reply_text("This preview is currently inactive.")
+                return
+                
+            active_access = db.get_active_access(preview_id, user.id)
+            if active_access:
+                await update.message.reply_text("You already have an active access to this preview. Please check your previous messages.")
+                return
+                
+            # Grant new 15-minute access
+            expires_at = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
+            
+            try:
+                msg = None
+                if preview["type"] == "url":
+                    msg = await update.message.reply_text(f"Here is your preview (expires in 15 mins):\n{preview['content']}")
+                elif preview["type"] == "file_id":
+                    # Try video, then document, then photo
+                    try:
+                        msg = await update.message.reply_video(video=preview["content"], caption="Preview (expires in 15 mins)")
+                    except Exception:
+                        try:
+                            msg = await update.message.reply_document(document=preview["content"], caption="Preview (expires in 15 mins)")
+                        except Exception:
+                            msg = await update.message.reply_photo(photo=preview["content"], caption="Preview (expires in 15 mins)")
+                
+                if msg:
+                    db.record_preview_access(
+                        preview_id=preview_id,
+                        user_id=user.id,
+                        chat_id=msg.chat_id,
+                        message_ids=json.dumps([msg.message_id]),
+                        accessed_at=datetime.utcnow().isoformat(),
+                        expires_at=expires_at
+                    )
+                    db.log_event("preview_access", user.id, user.username, user.full_name, f"Accessed preview: {preview['name']}")
+                    return
+            except Exception as e:
+                logger.error(f"Failed to send preview {preview_id} to {user.id}: {e}")
+                await update.message.reply_text("Sorry, there was an error loading this preview.")
+                return
+        else:
+            await update.message.reply_text("Invalid or expired preview link.")
+            return
+
+    # Normal /start behavior below
     try:
         db.upsert_user(user.id, user.username or "", user.full_name or "")
         db.log_event(
@@ -61,7 +141,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logger.error("Failed to reply /start for %s: %s", user.id, e)
-
 
 async def approve_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     request = update.chat_join_request

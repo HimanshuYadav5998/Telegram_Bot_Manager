@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Bot, BarChart3, Users, Bell, Settings, RefreshCw, LogOut } from 'lucide-react'
+import { Bot, BarChart3, Users, Bell, Settings, RefreshCw, LogOut, Video } from 'lucide-react'
 import StatCard from './components/StatCard'
 import UsersTable from './components/UsersTable'
 import BotControls from './components/BotControls'
 import ActivityFeed from './components/ActivityFeed'
 import JoinRequests from './components/JoinRequests'
 import LoginPage from './components/LoginPage'
+import Previews from './components/Previews'
 
 const API = '/api'
 
@@ -13,6 +14,7 @@ const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard',     icon: BarChart3 },
   { id: 'users',     label: 'Users',         icon: Users     },
   { id: 'requests',  label: 'Join Requests', icon: Bell      },
+  { id: 'previews',  label: 'Content Previews', icon: Video  },
   { id: 'controls',  label: 'Bot Controls',  icon: Bot       },
   { id: 'activity',  label: 'Activity',      icon: RefreshCw },
   { id: 'settings',  label: 'Settings',      icon: Settings  },
@@ -149,6 +151,7 @@ export default function App() {
           {page === 'dashboard' && <DashboardPage stats={stats} botStatus={botStatus} />}
           {page === 'users'     && <UsersTable api={API} token={token} />}
           {page === 'requests'  && <JoinRequests api={API} token={token} onRefresh={fetchStats} />}
+          {page === 'previews'  && <Previews authHeaders={authHeaders} />}
           {page === 'controls'  && <BotControls api={API} token={token} botStatus={botStatus} onRefresh={fetchStats} />}
           {page === 'activity'  && <ActivityFeed api={API} token={token} />}
           {page === 'settings'  && <SettingsPage api={API} token={token} />}
