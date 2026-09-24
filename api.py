@@ -35,9 +35,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# All API endpoints are mounted under /api so the React frontend (which calls
+# /api/... in both dev and prod) works without a proxy in production.
+from fastapi import APIRouter as _APIRouter
+api_router = _APIRouter(prefix="/api")
+
 # ── Token store (in-memory; one admin session at a time) ──────────────────────
 _active_tokens: set[str] = set()
 _bearer = HTTPBearer()
+
 
 
 def _hash_pw(password: str) -> str:
@@ -144,7 +150,7 @@ class UserStatusPayload(BaseModel):
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-@app.post("/auth/login")
+@api_router.post("/auth/login")
 def login(payload: LoginPayload):
     stored_hash = db.get_config("dashboard_password_hash")
     if stored_hash is None:
@@ -162,13 +168,13 @@ def login(payload: LoginPayload):
     return {"token": token}
 
 
-@app.post("/auth/logout")
+@api_router.post("/auth/logout")
 def logout(token: str = Depends(_verify_token)):
     _active_tokens.discard(token)
     return {"ok": True}
 
 
-@app.post("/auth/change-password")
+@api_router.post("/auth/change-password")
 def change_password(
     payload: ChangePasswordPayload,
     token: str = Depends(_verify_token),
@@ -183,18 +189,18 @@ def change_password(
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
-@app.get("/stats")
+@api_router.get("/stats")
 def get_stats(token: str = Depends(_verify_token)):
     return db.get_stats()
 
 
 # ── Users ─────────────────────────────────────────────────────────────────────
-@app.get("/users")
+@api_router.get("/users")
 def get_users(search: str = "", token: str = Depends(_verify_token)):
     return db.get_all_users(search=search)
 
 
-@app.post("/users/{user_id}/status")
+@api_router.post("/users/{user_id}/status")
 def set_user_status(
     user_id: int,
     payload: UserStatusPayload,
@@ -207,12 +213,12 @@ def set_user_status(
 
 
 # ── Join Requests ─────────────────────────────────────────────────────────────
-@app.get("/join-requests")
+@api_router.get("/join-requests")
 def get_join_requests(status: str = None, token: str = Depends(_verify_token)):
     return db.get_join_requests(status=status)
 
 
-@app.post("/join-requests/{user_id}/approve")
+@api_router.post("/join-requests/{user_id}/approve")
 def approve_request(user_id: int, token: str = Depends(_verify_token)):
     db.update_join_request_status(user_id, "approved")
     db.log_event(event_type="approved", user_id=user_id,
@@ -220,7 +226,7 @@ def approve_request(user_id: int, token: str = Depends(_verify_token)):
     return {"ok": True}
 
 
-@app.post("/join-requests/{user_id}/reject")
+@api_router.post("/join-requests/{user_id}/reject")
 def reject_request(user_id: int, token: str = Depends(_verify_token)):
     db.update_join_request_status(user_id, "rejected")
     db.log_event(event_type="rejected", user_id=user_id,
@@ -229,13 +235,13 @@ def reject_request(user_id: int, token: str = Depends(_verify_token)):
 
 
 # ── Events / Activity Feed ─────────────────────────────────────────────────────
-@app.get("/events")
+@api_router.get("/events")
 def get_events(limit: int = 50, token: str = Depends(_verify_token)):
     return db.get_recent_events(limit=limit)
 
 
 # ── Bot Controls ──────────────────────────────────────────────────────────────
-@app.get("/bot/status")
+@api_router.get("/bot/status")
 def bot_status(token: str = Depends(_verify_token)):
     running = _is_bot_running()
     if running:
@@ -249,7 +255,7 @@ def bot_status(token: str = Depends(_verify_token)):
     return {"status": status}
 
 
-@app.post("/bot/start")
+@api_router.post("/bot/start")
 def bot_start(token: str = Depends(_verify_token)):
     global _bot_process, _auto_restart, _watchdog_started
     with _bot_lock:
@@ -279,7 +285,7 @@ def bot_start(token: str = Depends(_verify_token)):
             raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/bot/stop")
+@api_router.post("/bot/stop")
 def bot_stop(token: str = Depends(_verify_token)):
     global _bot_process, _auto_restart, _watchdog_started
     with _bot_lock:
@@ -299,7 +305,7 @@ def bot_stop(token: str = Depends(_verify_token)):
 
 
 # ── Broadcast ─────────────────────────────────────────────────────────────────
-@app.post("/broadcast")
+@api_router.post("/broadcast")
 async def broadcast(payload: BroadcastPayload, token: str = Depends(_verify_token)):
     bot_token = db.get_config("bot_token")
     if not bot_token or bot_token == "YOUR_BOT_TOKEN":
@@ -330,7 +336,7 @@ async def broadcast(payload: BroadcastPayload, token: str = Depends(_verify_toke
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
-@app.get("/config")
+@api_router.get("/config")
 def get_config(token: str = Depends(_verify_token)):
     raw = db.get_config("bot_token") or ""
     return {
@@ -339,7 +345,7 @@ def get_config(token: str = Depends(_verify_token)):
     }
 
 
-@app.put("/config")
+@api_router.put("/config")
 def update_config(payload: ConfigPayload, token: str = Depends(_verify_token)):
     if payload.channel_link is not None:
         db.set_config("channel_link", payload.channel_link)
@@ -351,17 +357,18 @@ def update_config(payload: ConfigPayload, token: str = Depends(_verify_token)):
     return {"ok": True}
 
 
+# ── Wire up the /api router ───────────────────────────────────────────────────
+app.include_router(api_router)
+
 # ── Serve React frontend (production build) ───────────────────────────────────
-# Mount static assets (js/css/images) — only if the build exists
 if DIST_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
 
     @app.get("/", include_in_schema=False)
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str = ""):
-        """Catch-all: serve React's index.html for any non-API route."""
-        # Don't catch API routes
-        if full_path.startswith(("api/", "docs", "openapi")):
+        """Catch-all: serve React index.html for any non-API route."""
+        if full_path.startswith(("api/", "api", "docs", "openapi")):
             raise HTTPException(status_code=404)
         index = DIST_DIR / "index.html"
         if index.exists():
