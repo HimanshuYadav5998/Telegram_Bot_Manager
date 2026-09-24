@@ -1,0 +1,14 @@
+# nixpacks.toml — tells Nixpacks exactly what providers and phases to use
+# This prevents it from auto-detecting and getting confused by Python + Node
+
+[phases.setup]
+nixPkgs = ["python312", "nodejs_20", "npm-10_x"]
+
+[phases.install]
+cmds = [
+  "pip install -r requirements.txt",
+  "cd dashboard && npm install && npm run build && cd .."
+]
+
+[start]
+cmd = "python api.py"

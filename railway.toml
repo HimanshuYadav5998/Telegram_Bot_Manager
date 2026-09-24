@@ -1,7 +1,5 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# railway.toml — Railway deployment configuration
-# Docs: https://docs.railway.app/reference/config-as-code
-# ─────────────────────────────────────────────────────────────────────────────
+# railway.toml — applied per-service in Railway dashboard
+# For the API service (serves dashboard + REST API)
 
 [build]
 builder = "NIXPACKS"
@@ -11,11 +9,3 @@ buildCommand = "pip install -r requirements.txt && cd dashboard && npm install &
 startCommand = "python api.py"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-
-[[services]]
-name = "api"
-startCommand = "python api.py"
-
-[[services]]
-name = "bot"
-startCommand = "python bot.py"
