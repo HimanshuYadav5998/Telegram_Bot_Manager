@@ -1,0 +1,23 @@
+# Database (contains your users' data — don't share publicly)
+bot_data.db
+
+# Logs
+bot.log
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+venv/
+.venv/
+
+# Node / React build artifacts
+dashboard/node_modules/
+dashboard/dist/
+
+# OS
+.DS_Store
+Thumbs.db
