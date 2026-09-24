@@ -1,9 +1,7 @@
-# railway.toml — applied per-service in Railway dashboard
-# For the API service (serves dashboard + REST API)
-
+# railway.toml — use Dockerfile, not Nixpacks
 [build]
-builder = "NIXPACKS"
-buildCommand = "pip install -r requirements.txt && cd dashboard && npm install && npm run build && cd .."
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "python api.py"
